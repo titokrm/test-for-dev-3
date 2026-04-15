@@ -1,6 +1,6 @@
 # Редактор строки с выделением и перетягиванием / String Editor with Selection and Drag-and-Drop
 
-[Русская версия](#русская-версия) | [English version](#english-version)
+[Русская версия](#Описание) | [English version](#Description)
 
 ---
 
