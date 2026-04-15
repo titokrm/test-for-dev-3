@@ -1,0 +1,798 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Редактор рядка з перетягуванням</title>
+    <style>
+      :root {
+        --bg-top: #f6f0e8;
+        --bg-bottom: #dce8f3;
+        --panel: rgba(255, 255, 255, 0.88);
+        --text: #1f2a37;
+        --muted: #5b6470;
+        --primary: #1667c2;
+        --primary-ink: #ffffff;
+        --border: #cfd8e3;
+        --accent: #d64545;
+        --shadow: 0 16px 40px rgba(21, 34, 55, 0.13);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        color: var(--text);
+        background:
+          radial-gradient(
+            circle at 12% 16%,
+            rgba(255, 196, 136, 0.45),
+            transparent 42%
+          ),
+          radial-gradient(
+            circle at 85% 6%,
+            rgba(120, 173, 230, 0.45),
+            transparent 46%
+          ),
+          linear-gradient(150deg, var(--bg-top), var(--bg-bottom));
+        padding: 24px;
+      }
+
+      .page {
+        width: min(920px, 100%);
+        margin: 0 auto;
+        display: grid;
+        gap: 16px;
+      }
+
+      .card {
+        background: var(--panel);
+        backdrop-filter: blur(5px);
+        border-radius: 16px;
+        border: 1px solid rgba(255, 255, 255, 0.65);
+        box-shadow: var(--shadow);
+        padding: 18px;
+      }
+
+      h1 {
+        margin: 0 0 10px;
+        font-size: clamp(1.25rem, 2.3vw, 1.7rem);
+        letter-spacing: 0.02em;
+      }
+
+      .hint {
+        margin: 0;
+        color: var(--muted);
+        line-height: 1.5;
+        font-size: 0.96rem;
+      }
+
+      form {
+        display: grid;
+        gap: 10px;
+        grid-template-columns: 1fr auto;
+        align-items: center;
+      }
+
+      label {
+        grid-column: 1 / -1;
+        font-weight: 600;
+        font-size: 0.95rem;
+      }
+
+      input[type="text"] {
+        width: 100%;
+        padding: 12px 14px;
+        border-radius: 10px;
+        border: 1px solid var(--border);
+        font-size: 1rem;
+        outline: none;
+        background: #fff;
+        transition:
+          border-color 0.2s ease,
+          box-shadow 0.2s ease;
+      }
+
+      input[type="text"]:focus {
+        border-color: #8fb9e8;
+        box-shadow: 0 0 0 3px rgba(22, 103, 194, 0.16);
+      }
+
+      button {
+        border: 0;
+        border-radius: 10px;
+        cursor: pointer;
+        padding: 12px 16px;
+        font-weight: 700;
+        color: var(--primary-ink);
+        background: linear-gradient(135deg, #2d7ddb, var(--primary));
+        transition:
+          transform 0.16s ease,
+          filter 0.2s ease;
+      }
+
+      button:hover {
+        filter: brightness(1.05);
+        transform: translateY(-1px);
+      }
+
+      button:active {
+        transform: translateY(0);
+      }
+
+      .result-wrap {
+        min-height: 140px;
+        border: 2px dashed #adc4dc;
+        border-radius: 14px;
+        padding: 14px;
+        background: rgba(255, 255, 255, 0.82);
+        position: relative;
+      }
+
+      .result-title {
+        margin: 0 0 10px;
+        font-weight: 700;
+        color: #32455e;
+        font-size: 0.95rem;
+      }
+
+      .text-zone {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: flex-start;
+        gap: 0;
+        white-space: pre-wrap;
+        user-select: none;
+        touch-action: none;
+        cursor: default;
+      }
+
+      .string-area {
+        line-height: 1.55;
+        min-height: 30px;
+      }
+
+      .char {
+        font: inherit;
+        line-height: inherit;
+        color: currentColor;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 6px;
+        min-width: 0.46ch;
+        padding: 2px 1px;
+        transition:
+          transform 0.12s ease,
+          color 0.15s ease,
+          background-color 0.15s ease;
+      }
+
+      .string-area .char {
+        font:
+          600 1.26rem/1.35 "Consolas",
+          "Courier New",
+          monospace;
+        color: #223048;
+        min-width: 0.72ch;
+      }
+
+      .char.space {
+        min-width: 0.72ch;
+      }
+
+      .char.selected {
+        color: var(--accent);
+        background: rgba(214, 69, 69, 0.15);
+      }
+
+      .char.dragging {
+        box-shadow: inset 0 0 0 1px rgba(214, 69, 69, 0.28);
+      }
+
+      @media (max-width: 680px) {
+        body {
+          padding: 14px;
+        }
+
+        form {
+          grid-template-columns: 1fr;
+        }
+
+        button {
+          width: 100%;
+        }
+
+        .char {
+          font-size: 1.16rem;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <section class="card">
+        <h1 class="text-zone" id="titleZone" data-zone-id="titleZone">
+          Рядок з виділенням та перетягуванням
+        </h1>
+        <p class="hint text-zone" id="hintZone" data-zone-id="hintZone">
+          Введіть рядок, натисніть кнопку "Показати рядок" або ENTER, потім
+          виділяйте символи через Ctrl+клік. Виділений символ або групу можна
+          перетягувати мишею: на символ (обмін місцями), між символами
+          (вставка), а також між різними текстовими блоками сторінки.
+        </p>
+      </section>
+
+      <section class="card">
+        <form id="inputForm" autocomplete="off">
+          <label
+            class="text-zone"
+            for="sourceInput"
+            id="titleFormZone"
+            data-zone-id="titleFormZone"
+            >Текст</label
+          >
+          <input
+            id="sourceInput"
+            name="sourceInput"
+            type="text"
+            placeholder="Наприклад: drag and drop"
+            required
+          />
+          <button type="submit">Показати рядок</button>
+        </form>
+      </section>
+
+      <section class="card result-wrap" id="resultWrap">
+        <p
+          class="result-title text-zone"
+          id="resultTitleZone"
+          data-zone-id="resultTitleZone"
+        >
+          Результат:
+        </p>
+        <div
+          class="string-area text-zone"
+          id="stringArea"
+          data-zone-id="stringArea"
+          aria-live="polite"
+        ></div>
+      </section>
+    </main>
+
+    <script>
+      const form = document.getElementById("inputForm");
+      const input = document.getElementById("sourceInput");
+
+      function getNormalizedText(elementId) {
+        const element = document.getElementById(elementId);
+        return element.textContent.replace(/\s+/g, " ").trim();
+      }
+
+      const zones = {
+        titleZone: {
+          id: "titleZone",
+          element: document.getElementById("titleZone"),
+          chars: Array.from(getNormalizedText("titleZone")),
+        },
+        hintZone: {
+          id: "hintZone",
+          element: document.getElementById("hintZone"),
+          chars: Array.from(getNormalizedText("hintZone")),
+        },
+        titleFormZone: {
+          id: "titleFormZone",
+          element: document.getElementById("titleFormZone"),
+          chars: Array.from(getNormalizedText("titleFormZone")),
+        },
+        resultTitleZone: {
+          id: "resultTitleZone",
+          element: document.getElementById("resultTitleZone"),
+          chars: Array.from(getNormalizedText("resultTitleZone")),
+        },
+        stringArea: {
+          id: "stringArea",
+          element: document.getElementById("stringArea"),
+          chars: [],
+        },
+      };
+
+      const selected = {
+        zoneId: null,
+        indices: new Set(),
+      };
+
+      const dragState = {
+        active: false,
+        sourceZoneId: null,
+        indices: [],
+        targetZoneId: null,
+        placeholderIndex: null,
+        mode: "insert",
+        hoverZoneId: null,
+        hoverIndex: null,
+      };
+
+      form.addEventListener("submit", (event) => {
+        event.preventDefault();
+        zones.stringArea.chars = Array.from(input.value);
+        selected.zoneId = null;
+        selected.indices.clear();
+        resetDragState();
+        renderAll();
+      });
+
+      document.addEventListener("click", (event) => {
+        const charEl = event.target.closest(".char");
+        if (!charEl || !event.ctrlKey) {
+          return;
+        }
+
+        const zoneId = charEl.dataset.zoneId;
+        const index = Number(charEl.dataset.index);
+        if (zoneId !== "stringArea") {
+          return;
+        }
+
+        if (!zones[zoneId] || !Number.isInteger(index)) {
+          return;
+        }
+
+        if (selected.zoneId !== zoneId) {
+          selected.zoneId = zoneId;
+          selected.indices = new Set([index]);
+        } else if (selected.indices.has(index)) {
+          selected.indices.delete(index);
+          if (selected.indices.size === 0) {
+            selected.zoneId = null;
+          }
+        } else {
+          selected.indices.add(index);
+        }
+
+        renderAll();
+      });
+
+      document.addEventListener("pointerdown", (event) => {
+        const charEl = event.target.closest(".char");
+        if (!charEl || event.button !== 0 || event.ctrlKey) {
+          return;
+        }
+
+        const zoneId = charEl.dataset.zoneId;
+        const index = Number(charEl.dataset.index);
+        if (!zones[zoneId] || !Number.isInteger(index)) {
+          return;
+        }
+
+        if (selected.zoneId !== zoneId || !selected.indices.has(index)) {
+          return;
+        }
+
+        startDrag(event, zoneId);
+      });
+
+      document.addEventListener("pointermove", (event) => {
+        if (!dragState.active) {
+          return;
+        }
+
+        updateDropTarget(event.clientX, event.clientY);
+      });
+
+      document.addEventListener("pointerup", (event) => {
+        if (!dragState.active) {
+          return;
+        }
+
+        finishDrag(event.clientX, event.clientY);
+      });
+
+      function renderAll() {
+        Object.values(zones).forEach((zone) => renderZone(zone.id));
+        normalizeSelection();
+      }
+
+      function renderZone(zoneId) {
+        const zone = zones[zoneId];
+        zone.element.textContent = "";
+
+        const units = getRenderUnitsForZone(zoneId);
+        units.forEach((unit) => {
+          const span = document.createElement("span");
+          span.className = "char";
+          span.dataset.zoneId = zoneId;
+          span.dataset.index = String(unit.index);
+          span.dataset.dragging = unit.dragging ? "1" : "0";
+
+          if (unit.char === " ") {
+            span.classList.add("space");
+            span.textContent = "\u00A0";
+          } else {
+            span.textContent = unit.char;
+          }
+
+          if (unit.selected) {
+            span.classList.add("selected");
+          }
+
+          if (unit.dragging) {
+            span.classList.add("dragging");
+          }
+
+          zone.element.appendChild(span);
+        });
+      }
+
+      function normalizeSelection() {
+        if (!selected.zoneId || !zones[selected.zoneId]) {
+          selected.zoneId = null;
+          selected.indices.clear();
+          return;
+        }
+
+        const max = zones[selected.zoneId].chars.length;
+        selected.indices = new Set(
+          [...selected.indices].filter((index) => index >= 0 && index < max),
+        );
+
+        if (selected.indices.size === 0) {
+          selected.zoneId = null;
+        }
+      }
+
+      function startDrag(event, sourceZoneId) {
+        dragState.active = true;
+        dragState.sourceZoneId = sourceZoneId;
+        dragState.indices = [...selected.indices].sort((a, b) => a - b);
+        dragState.targetZoneId = sourceZoneId;
+        dragState.mode = "insert";
+        dragState.hoverZoneId = null;
+        dragState.hoverIndex = null;
+        dragState.placeholderIndex = dragState.indices[0];
+
+        updateDropTarget(event.clientX, event.clientY);
+        event.preventDefault();
+      }
+
+      function updateDropTarget(clientX, clientY) {
+        const prev = {
+          targetZoneId: dragState.targetZoneId,
+          placeholderIndex: dragState.placeholderIndex,
+          mode: dragState.mode,
+          hoverZoneId: dragState.hoverZoneId,
+          hoverIndex: dragState.hoverIndex,
+        };
+
+        const pointEl = document.elementFromPoint(clientX, clientY);
+        const zoneEl = pointEl ? pointEl.closest(".text-zone") : null;
+
+        if (!zoneEl || !zones[zoneEl.dataset.zoneId]) {
+          dragState.targetZoneId = prev.targetZoneId;
+          dragState.placeholderIndex = prev.placeholderIndex;
+          dragState.mode = prev.mode;
+          dragState.hoverZoneId = prev.hoverZoneId;
+          dragState.hoverIndex = prev.hoverIndex;
+          renderAll();
+          return;
+        }
+
+        const zoneId = zoneEl.dataset.zoneId;
+        const zone = zones[zoneId];
+        const charEl = pointEl.closest(".char");
+        const prevInSameZone = prev.targetZoneId === zoneId;
+
+        dragState.targetZoneId = zoneId;
+        dragState.mode = "insert";
+        dragState.hoverZoneId = null;
+        dragState.hoverIndex = null;
+        dragState.placeholderIndex = null;
+
+        if (charEl && charEl.dataset.zoneId === zoneId) {
+          const hovered = Number(charEl.dataset.index);
+          const isDraggingPreview = charEl.dataset.dragging === "1";
+
+          if (Number.isInteger(hovered) && !isDraggingPreview) {
+            const rect = charEl.getBoundingClientRect();
+            const middle = rect.left + rect.width / 2;
+            const sourceIsTarget = dragState.sourceZoneId === zoneId;
+            const selectedHere =
+              sourceIsTarget && dragState.indices.includes(hovered);
+            const canSwap =
+              dragState.indices.length === 1 &&
+              (!selectedHere || dragState.sourceZoneId !== zoneId);
+
+            if (canSwap && !selectedHere) {
+              dragState.mode = "swap";
+              dragState.hoverZoneId = zoneId;
+              dragState.hoverIndex = hovered;
+            } else if (selectedHere) {
+              if (prevInSameZone && Number.isInteger(prev.placeholderIndex)) {
+                dragState.mode = "insert";
+                dragState.placeholderIndex = prev.placeholderIndex;
+              } else {
+                dragState.placeholderIndex = resolveInsertIndex(
+                  zoneId,
+                  clientX,
+                  clientY,
+                );
+              }
+            } else {
+              dragState.placeholderIndex =
+                clientX < middle ? hovered : hovered + 1;
+            }
+          } else {
+            dragState.placeholderIndex = resolveInsertIndex(
+              zoneId,
+              clientX,
+              clientY,
+            );
+          }
+        } else {
+          if (prevInSameZone && Number.isInteger(prev.placeholderIndex)) {
+            dragState.placeholderIndex = prev.placeholderIndex;
+          } else {
+            dragState.placeholderIndex = resolveInsertIndex(
+              zoneId,
+              clientX,
+              clientY,
+            );
+          }
+        }
+
+        renderAll();
+      }
+
+      function resolveInsertIndex(zoneId, clientX, clientY) {
+        const zone = zones[zoneId];
+        const stableChars = Array.from(
+          zone.element.querySelectorAll('.char[data-zone-id="' + zoneId + '"]'),
+        ).filter((el) => el.dataset.dragging !== "1");
+
+        if (stableChars.length === 0) {
+          const rect = zone.element.getBoundingClientRect();
+          const ratio = (clientX - rect.left) / Math.max(rect.width, 1);
+          return ratio < 0.5 ? 0 : zone.chars.length;
+        }
+
+        let bestScore = Number.POSITIVE_INFINITY;
+        let bestIndex = 0;
+
+        for (const el of stableChars) {
+          const index = Number(el.dataset.index);
+          if (!Number.isInteger(index)) {
+            continue;
+          }
+
+          const rect = el.getBoundingClientRect();
+          const centerY = (rect.top + rect.bottom) / 2;
+          const rowPenalty = Math.abs(clientY - centerY) * 3;
+
+          const leftScore = rowPenalty + Math.abs(clientX - rect.left);
+          if (leftScore < bestScore) {
+            bestScore = leftScore;
+            bestIndex = index;
+          }
+
+          const rightScore = rowPenalty + Math.abs(clientX - rect.right);
+          if (rightScore < bestScore) {
+            bestScore = rightScore;
+            bestIndex = index + 1;
+          }
+        }
+
+        return Math.max(0, Math.min(bestIndex, zone.chars.length));
+      }
+
+      function finishDrag(clientX, clientY) {
+        const moving = getMovingChars();
+        if (moving.length === 0) {
+          resetDragState();
+          renderAll();
+          return;
+        }
+
+        updateDropTarget(clientX, clientY);
+
+        if (
+          dragState.mode === "swap" &&
+          dragState.indices.length === 1 &&
+          dragState.hoverZoneId &&
+          Number.isInteger(dragState.hoverIndex)
+        ) {
+          applySwap();
+        } else {
+          applyInsert();
+        }
+
+        resetDragState();
+        renderAll();
+      }
+
+      function getMovingChars() {
+        const source = zones[dragState.sourceZoneId];
+        if (!source) {
+          return [];
+        }
+
+        const selectedSet = new Set(dragState.indices);
+        return source.chars.filter((_, index) => selectedSet.has(index));
+      }
+
+      function applySwap() {
+        const sourceZone = zones[dragState.sourceZoneId];
+        const targetZone = zones[dragState.hoverZoneId];
+        const sourceIndex = dragState.indices[0];
+        const targetIndex = dragState.hoverIndex;
+
+        const sourceChar = sourceZone.chars[sourceIndex];
+        sourceZone.chars[sourceIndex] = targetZone.chars[targetIndex];
+        targetZone.chars[targetIndex] = sourceChar;
+
+        selected.zoneId = targetZone.id;
+        selected.indices = new Set([targetIndex]);
+      }
+
+      function applyInsert() {
+        const sourceZone = zones[dragState.sourceZoneId];
+        const targetZone =
+          zones[dragState.targetZoneId || dragState.sourceZoneId];
+        const moving = getMovingChars();
+        if (moving.length === 0) {
+          return;
+        }
+
+        const sourceSet = new Set(dragState.indices);
+        sourceZone.chars = sourceZone.chars.filter((_, i) => !sourceSet.has(i));
+
+        let insertIndex = Number.isInteger(dragState.placeholderIndex)
+          ? dragState.placeholderIndex
+          : targetZone.chars.length;
+
+        if (sourceZone.id === targetZone.id) {
+          const removedBefore = dragState.indices.filter(
+            (index) => index < insertIndex,
+          ).length;
+          insertIndex -= removedBefore;
+        }
+
+        insertIndex = Math.max(
+          0,
+          Math.min(insertIndex, targetZone.chars.length),
+        );
+        targetZone.chars.splice(insertIndex, 0, ...moving);
+
+        selected.zoneId = targetZone.id;
+        selected.indices = new Set(
+          Array.from({ length: moving.length }, (_, i) => insertIndex + i),
+        );
+      }
+
+      function getRenderUnitsForZone(zoneId) {
+        const zone = zones[zoneId];
+        const base = zone.chars.map((char, index) => ({
+          char,
+          index,
+          selected: selected.zoneId === zoneId && selected.indices.has(index),
+          dragging: false,
+        }));
+
+        if (
+          !dragState.active ||
+          !dragState.sourceZoneId ||
+          dragState.indices.length === 0
+        ) {
+          return base;
+        }
+
+        if (
+          dragState.mode === "swap" &&
+          dragState.indices.length === 1 &&
+          dragState.hoverZoneId &&
+          Number.isInteger(dragState.hoverIndex)
+        ) {
+          const sourceZoneId = dragState.sourceZoneId;
+          const sourceIndex = dragState.indices[0];
+          const targetZoneId = dragState.hoverZoneId;
+          const targetIndex = dragState.hoverIndex;
+
+          if (zoneId === sourceZoneId && sourceZoneId === targetZoneId) {
+            const swapped = base.map((unit) => ({ ...unit }));
+            const a = { ...swapped[sourceIndex], dragging: true };
+            const b = { ...swapped[targetIndex], dragging: true };
+            swapped[sourceIndex] = b;
+            swapped[targetIndex] = a;
+            return swapped;
+          }
+
+          if (zoneId === sourceZoneId) {
+            return base.map((unit, idx) =>
+              idx === sourceIndex
+                ? {
+                    char: zones[targetZoneId].chars[targetIndex],
+                    index: unit.index,
+                    selected: unit.selected,
+                    dragging: true,
+                  }
+                : unit,
+            );
+          }
+
+          if (zoneId === targetZoneId) {
+            return base.map((unit, idx) =>
+              idx === targetIndex
+                ? {
+                    char: zones[sourceZoneId].chars[sourceIndex],
+                    index: unit.index,
+                    selected: unit.selected,
+                    dragging: true,
+                  }
+                : unit,
+            );
+          }
+
+          return base;
+        }
+
+        if (
+          dragState.mode !== "insert" ||
+          !Number.isInteger(dragState.placeholderIndex) ||
+          !dragState.targetZoneId
+        ) {
+          return base;
+        }
+
+        const sourceZone = zones[dragState.sourceZoneId];
+        const targetZone = zones[dragState.targetZoneId];
+        const movingSet = new Set(dragState.indices);
+        const movingUnits = sourceZone.chars
+          .map((char, index) => ({ char, index }))
+          .filter((item) => movingSet.has(item.index))
+          .map((item) => ({ ...item, selected: true, dragging: true }));
+
+        if (zoneId === sourceZone.id && sourceZone.id !== targetZone.id) {
+          return base.filter((unit) => !movingSet.has(unit.index));
+        }
+
+        if (zoneId === targetZone.id) {
+          let targetBase = base;
+          let insertIndex = dragState.placeholderIndex;
+
+          if (sourceZone.id === targetZone.id) {
+            targetBase = base.filter((unit) => !movingSet.has(unit.index));
+            const removedBefore = dragState.indices.filter(
+              (index) => index < dragState.placeholderIndex,
+            ).length;
+            insertIndex -= removedBefore;
+          }
+
+          insertIndex = Math.max(0, Math.min(insertIndex, targetBase.length));
+          return [
+            ...targetBase.slice(0, insertIndex),
+            ...movingUnits,
+            ...targetBase.slice(insertIndex),
+          ];
+        }
+
+        return base;
+      }
+
+      function resetDragState() {
+        dragState.active = false;
+        dragState.sourceZoneId = null;
+        dragState.indices = [];
+        dragState.targetZoneId = null;
+        dragState.placeholderIndex = null;
+        dragState.mode = "insert";
+        dragState.hoverZoneId = null;
+        dragState.hoverIndex = null;
+      }
+
+      renderAll();
+    </script>
+  </body>
+</html>
